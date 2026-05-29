@@ -3,11 +3,32 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const OPENAIMODEL = "gpt-4.1-2025-04-14"
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+
+let openaiClient = null;
+
+/**
+ * Lazy initialization of OpenAI client.
+ * Only initializes when an OpenAI function is actually called.
+ * Throws error if OPENAI_API_KEY is not configured.
+ * 
+ * @returns {OpenAI} - The OpenAI client instance
+ */
+function getOpenAIClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured. Please set the OPENAI_API_KEY environment variable to use OpenAI features.");
+  }
+
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+
+  return openaiClient;
+}
 
 export async function extractKeywords (captions) {
+    const openai = getOpenAIClient();
     const response = await openai.responses.create({
       model: OPENAIMODEL,
       input: [
@@ -40,6 +61,7 @@ export async function extractKeywords (captions) {
 }
 
 export async function recommendKeywords (data) {
+     const openai = getOpenAIClient();
      const response = await openai.responses.create({
       model: OPENAIMODEL,
       input: [
@@ -72,6 +94,7 @@ export async function recommendKeywords (data) {
 }
 
 export async function recommendBroadNarrowKeywords (data) {
+     const openai = getOpenAIClient();
      const response = await openai.responses.create({
       model: OPENAIMODEL,
       input: [
@@ -104,6 +127,7 @@ export async function recommendBroadNarrowKeywords (data) {
 }
 
 export async function generateTextualDescriptions (data) {
+     const openai = getOpenAIClient();
      const response = await openai.responses.create({
       model: OPENAIMODEL,
       input: [
@@ -136,6 +160,7 @@ export async function generateTextualDescriptions (data) {
 }
 
 export async function generateLayout (data) {
+     const openai = getOpenAIClient();
      const response = await openai.responses.create({
       model: OPENAIMODEL,
       input: [
@@ -168,6 +193,7 @@ export async function generateLayout (data) {
 }
 
 export async function matchLayout (data) {
+     const openai = getOpenAIClient();
      const response = await openai.responses.create({
       model: OPENAIMODEL,
       input: [

@@ -1,1 +1,1 @@
-export const REACT_APP_BACKEND_URL = "https://human-ai-art-collab-dev.onrender.com";
+export const REACT_APP_BACKEND_URL = "http://localhost:5001";

@@ -91,14 +91,24 @@ function safeParseSpatialFields(body) {
  */
 export const uploadImage = (users, io) => async (req, res) => {
   try {
+    console.log('[upload] Upload request received');
     // Wrap users into a Map if not yet
     const usersMap = (users instanceof Map) ? users : new Map(Object.entries(users));
     const validationError = validateUploadRequest(req, usersMap);
-    if (validationError) return errorResponse(res, 400, validationError);
+    if (validationError) {
+      console.log('[upload] Validation failed:', validationError);
+      return errorResponse(res, 400, validationError);
+    }
+
+    console.log('[upload] Validation passed');
 
     const spatialFields = safeParseSpatialFields(req.body);
-    if (!spatialFields)
+    if (!spatialFields) {
+      console.log('[upload] Spatial fields missing');
       return errorResponse(res, 400, "Image spatial fields required (x, y, width, height, all ≥ 0)");
+    }
+
+    console.log('[upload] Spatial fields parsed');
 
     const [fullImage, ...segments] = req.files;
     const boardId = String(req.headers['board-id'] ?? '').trim();
@@ -107,11 +117,18 @@ export const uploadImage = (users, io) => async (req, res) => {
     const uploadId = generateCode(7);
     const progressCounter = createUploadProgressCounter(io, socketId, uploadId, fullImage.originalname);
 
+    console.log('[upload] Starting S3 upload');
     // S3 upload + DB create (fail fast, errors handled)
     const uploadResult = await safeS3Upload(fullImage, res);
-    if (!uploadResult) return; // error sent in safeS3Upload
+    if (!uploadResult) {
+      console.log('[upload] S3 upload failed');
+      return; // error sent in safeS3Upload
+    }
+
+    console.log('[upload] S3 upload succeeded');
 
     progressCounter.add(12.5);
+    console.log('[upload] Creating image in database');
     const imageDoc = await safeCreateImage({
       boardId,
       url: uploadResult.url,
@@ -120,7 +137,12 @@ export const uploadImage = (users, io) => async (req, res) => {
       author: user.username,
       res
     });
-    if (!imageDoc) return;
+    if (!imageDoc) {
+      console.log('[upload] Database save failed');
+      return;
+    }
+
+    console.log('[upload] Database save succeeded, image ID:', imageDoc._id);
 
     progressCounter.add(2.5);
 
@@ -218,9 +240,13 @@ export async function safeS3Upload(file, res) {
  */
 export async function safeCreateImage({ boardId, url, filename, dimensions, author, res }) {
   try {
+    console.log('[safeCreateImage] Creating image with:', { boardId, filename, dimensions, author });
     const { x, y, width, height } = dimensions;
-    return await createImage({ boardId, url, filename, x, y, width, height, author });
+    const result = await createImage({ boardId, url, filename, x, y, width, height, author });
+    console.log('[safeCreateImage] Image created successfully:', result._id);
+    return result;
   } catch (error) {
+    console.error('[safeCreateImage] Error:', error.message);
     logError('safeCreateImage', error);
     errorResponse(res, 500, 'Saving image failed');
     return null;
@@ -256,6 +282,7 @@ export async function handleSegmentation(fullImage, io, imageId, roomId, progres
  * @param {Array<object>} files (all 10 files: 1 full, 9 segments)
  */
 export async function handleKeywordGeneration(io, progressCounter, imageId, roomId, files) {
+  console.log('[captioning] Starting keyword generation');
   try {
     // Run captioning in parallel for all segments
     const captions = await Promise.all(
@@ -263,9 +290,12 @@ export async function handleKeywordGeneration(io, progressCounter, imageId, room
         try {
           // Strict mimetype check for segment images
           if (!isSafeImageMime(segment.mimetype)) return null;
-          return await getCaption(segment.buffer);
+          const caption = await getCaption(segment.buffer);
+          console.log(`[captioning] Segment ${idx} captioned: ${caption?.substring(0, 50)}...`);
+          return caption;
         } catch (err) {
           logError(`caption[${idx}]`, err);
+          console.error(`[captioning] Failed to caption segment ${idx}:`, err.message);
           return null;
         } finally {
           progressCounter.add(5.2);
@@ -273,6 +303,7 @@ export async function handleKeywordGeneration(io, progressCounter, imageId, room
       })
     );
     const validCaptions = captions.filter(Boolean);
+    console.log(`[captioning] Successfully captioned ${validCaptions.length}/${files.length} segments`);
 
     let keywords = {};
     if (validCaptions.length > 0) {
@@ -305,5 +336,6 @@ export async function handleKeywordGeneration(io, progressCounter, imageId, room
     progressCounter.add(5);
   } catch (err) {
     logError('handleKeywordGeneration', err);
+    console.error('[captioning] Keyword generation failed:', err.message);
   }
 }

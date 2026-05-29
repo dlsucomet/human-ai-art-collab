@@ -20,6 +20,7 @@ import authRoutes from './src/routes/auth.routes.js';
 // CORS origins array
 const allowedOrigins = [
   process.env.CLIENT_URL,
+  "http://localhost:3000",
   "https://d3kigqhpgswrju.cloudfront.net",
   "https://aicollabdesign.space",
   "https://www.aicollabdesign.space",
@@ -44,6 +45,9 @@ app.use(cors({
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
   allowedHeaders: "Origin,X-Requested-With,Content-Type,Accept,Authorization,board-id,socket-id"
 }));
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
 
 app.options('*', (req, res) => {
   const origin = req.headers.origin;
