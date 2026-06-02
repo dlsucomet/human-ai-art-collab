@@ -91,6 +91,27 @@ export function getEndpoint(provider, operation) {
 }
 
 /**
+ * Keyword Extraction Configuration
+ * 
+ * Environment Variables:
+ * - LOCAL_AI_KEYWORD_EXTRACTION_MODEL: Model for keyword extraction (default: llama3.1:8b)
+ * - LOCAL_AI_EXTRACTION_TIMEOUT: Request timeout for extraction (default: 5 minutes)
+ */
+export const KEYWORD_EXTRACTION_CONFIG = {
+    // Provider selection
+    provider: process.env.LOCAL_AI_PROVIDER || "ollama",
+    
+    // Endpoint configuration
+    baseUrl: process.env.LOCAL_AI_BASE_URL || "http://localhost:11434",
+    
+    // Model configuration for keyword extraction
+    keywordExtractionModel: process.env.LOCAL_AI_KEYWORD_EXTRACTION_MODEL || "llama3.1:8b",
+    
+    // Request configuration
+    timeout: parseInt(process.env.LOCAL_AI_EXTRACTION_TIMEOUT || "300000", 10), // 5 minutes default
+};
+
+/**
  * Validate the current configuration
  */
 export function validateConfig() {
@@ -106,6 +127,27 @@ export function validateConfig() {
     
     if (!captionModel) {
         throw new Error("OLLAMA_CAPTION_MODEL is not configured");
+    }
+    
+    return true;
+}
+
+/**
+ * Validate keyword extraction configuration
+ */
+export function validateKeywordExtractionConfig() {
+    const { provider, baseUrl, keywordExtractionModel } = KEYWORD_EXTRACTION_CONFIG;
+    
+    if (!provider) {
+        throw new Error("LOCAL_AI_PROVIDER is not configured for keyword extraction");
+    }
+    
+    if (!baseUrl) {
+        throw new Error("LOCAL_AI_BASE_URL is not configured for keyword extraction");
+    }
+    
+    if (!keywordExtractionModel) {
+        throw new Error("LOCAL_AI_KEYWORD_EXTRACTION_MODEL is not configured");
     }
     
     return true;
