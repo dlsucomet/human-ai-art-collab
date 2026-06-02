@@ -3,7 +3,7 @@ import { createImage } from '../services/imageService.js';
 import { addArrangementToImage, addKeywordsToImage } from '../services/keywordService.js';
 import { sendBufferImageToSAM } from '../utils/imageSegmentation.js';
 import { getCaption } from '../utils/imageCaptioning.js';
-import { extractKeywords } from '../utils/llm.js';
+import { extractKeywords } from '../services/keywordExtraction/index.js';
 import { generateCode } from '../utils/helpers.js';
 import { isValidObjectId } from '../utils/objectId.js';
 import { errorResponse, logError } from '../utils/error.js';

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { extractKeywords, extractKeywordsBatch, healthCheck, getKeywordExtractionProviderInfo } from "../services/keywordExtraction/index.js";
+import { extractKeywords, extractKeywordsBatch, healthCheck, getKeywordExtractionProviderInfo } from "../src/services/keywordExtraction/index.js";
 
 /**
  * Example script for testing keyword extraction with Llama 3.1:8b

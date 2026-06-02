@@ -7,7 +7,10 @@
     "nodemon": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
-    "test-caption": "node scripts/testCaption.js"
+    "test-caption": "node scripts/testCaption.js",
+    "test-mongodb": "node scripts/testMongoDB.js",
+    "test-keywords": "node scripts/testKeywordExtraction.js",
+    "test-api": "node scripts/testAPI.js"
   },
   "type": "module",
   "keywords": [],
