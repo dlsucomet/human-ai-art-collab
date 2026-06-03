@@ -152,3 +152,45 @@ export function validateKeywordExtractionConfig() {
     
     return true;
 }
+
+/**
+ * Keyword Expansion Configuration
+ * 
+ * Environment Variables:
+ * - LOCAL_AI_KEYWORD_EXPANSION_MODEL: Model for keyword expansion (default: llama3.1:8b)
+ * - LOCAL_AI_EXPANSION_TIMEOUT: Request timeout for expansion (default: 5 minutes)
+ */
+export const KEYWORD_EXPANSION_CONFIG = {
+    // Provider selection
+    provider: process.env.LOCAL_AI_PROVIDER || "ollama",
+    
+    // Endpoint configuration
+    baseUrl: process.env.LOCAL_AI_BASE_URL || "http://localhost:11434",
+    
+    // Model configuration for keyword expansion
+    keywordExpansionModel: process.env.LOCAL_AI_KEYWORD_EXPANSION_MODEL || "llama3.1:8b",
+    
+    // Request configuration
+    timeout: parseInt(process.env.LOCAL_AI_EXPANSION_TIMEOUT || "300000", 10), // 5 minutes default
+};
+
+/**
+ * Validate keyword expansion configuration
+ */
+export function validateKeywordExpansionConfig() {
+    const { provider, baseUrl, keywordExpansionModel } = KEYWORD_EXPANSION_CONFIG;
+    
+    if (!provider) {
+        throw new Error("LOCAL_AI_PROVIDER is not configured for keyword expansion");
+    }
+    
+    if (!baseUrl) {
+        throw new Error("LOCAL_AI_BASE_URL is not configured for keyword expansion");
+    }
+    
+    if (!keywordExpansionModel) {
+        throw new Error("LOCAL_AI_KEYWORD_EXPANSION_MODEL is not configured");
+    }
+    
+    return true;
+}

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
+import { expandKeywords } from "../services/keywordExpansion/index.js";
 dotenv.config();
 
 const OPENAIMODEL = "gpt-4.1-2025-04-14"
@@ -61,69 +62,11 @@ export async function extractKeywords (captions) {
 }
 
 export async function recommendKeywords (data) {
-     const openai = getOpenAIClient();
-     const response = await openai.responses.create({
-      model: OPENAIMODEL,
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: "You are assisting novice designers in generating fresh and unexpected ideas for illustrations by creatively expanding user-provided keywords, inspired by a design brief.\n\nYou will be provided with:\n\n1. Three vote-weighted keyword lists (each item = { term: integer }):\n   - **Subject matter**: Specific nouns or noun phrases, including compound objects and descriptive pairings..\n   - **Action & pose**: Clearly implied actions or poses. Use the base form or descriptive phrases. \n   - **Theme & mood**: Adjectives or abstract nouns capturing emotion, setting, or cultural context. \n\n2. **Design Brief (string)**: A free-form text description of the overall illustration intent, use-case, or style.\n\n# Steps\n\n1. **Review Input**: Analyze the design brief and keyword lists.\n2. **Keyword Expansion**:\n   - Prioritize high-vote-weight terms.\n   - Creatively expand keywords by combining elements.\n   - Ensure new results are creative and different from originals.\n   - Include at least one Subject matter in each combination.\n   - Avoid simple rewordings or near-synonyms.\n   - Exclude variations like plurals and style descriptors (e.g., cartoon, illustration). \n   - Use root forms of words only.\n3. **Organize by Category**: Classify expanded keywords under \"Subject matter,\" \"Action & pose,\" and \"Theme & mood.\"\n\n# Output Format\n\nThe output should be a structured JSON object with keys for each category: \"Subject matter,\" \"Action & pose,\" and \"Theme & mood.\"\n\n# Examples\n\n**User Input:**  \n```json\n{\n  \"Subject matter\": {\n    \"robot\": 5,\n    \"abandoned city\": 4,\n    \"overgrown ruins\": 3,\n    \"satellite\": 2\n  },\n  \"Action & pose\": {\n    \"scanning\": 4,\n    \"walking\": 3,\n    \"repairing\": 2\n  },\n  \"Theme & mood\": {\n    \"melancholic\": 4,\n    \"mysterious\": 3,\n    \"hopeful\": 2\n  },\n  \"Brief\": \"A post-apocalyptic AI character wandering a lost city searching for signs of life.\"\n}\n```\n\n**Assistant Output:**  \n```json\n{\n  \"Subject matter\": [\n    \"plaza\",\n    \"power hub\",\n    \"vine-wrapped android\",\n    \"obelisk\"\n  ],\n  \"Action & pose\": [\n    \"kneeling\",\n    \"gently uncovering rubble\",\n    \"raising an antenna\"\n  ],\n  \"Theme & mood\": [\n    \"reverent\",\n    \"aching solitude\",\n    \"flickers of wonder\",\n    \"timeless curiosity\"\n  ]\n}\n```\n\n**User Input:**  \n```json\n{\n  \"Subject matter\": {\n    \"witch\": 5,\n    \"library\": 4,\n    \"books\": 3,\n    \"candles\": 2\n  },\n  \"Action & pose\": {\n    \"reading\": 4,\n    \"floating\": 3,\n    \"casting a spell\": 2\n  },\n  \"Theme & mood\": {\n    \"mystical\": 5,\n    \"dark\": 3,\n    \"cozy\": 2\n  },\n  \"Brief\": \"A magical study where a young witch explores forbidden knowledge in a floating library of shadows.\"\n}\n```\n\n**Assistant Output:**  \n```json\n{\n  \"Subject matter\": [\n    \"grimoire\",\n    \"candelabra\",\n    \"ink-drenched shadows\",\n    \"spellroom\"\n  ],\n  \"Action & pose\": [\n    \"gazing\",\n    \"hovering\",\n    \"summoning memories\"\n  ],\n  \"Theme & mood\": [\n    \"dread\",\n    \"hidden warmth\",\n    \"arcane\",\n    \"eerie intimacy\"\n  ]\n}\n```\n\n**User Input:**  \n```json\n{\n  \"Subject matter\": {\n    \"pirate ship\": 5,\n    \"kraken\": 4,\n    \"treasure chest\": 3,\n    \"foggy ocean\": 2\n  },\n  \"Action & pose\": {\n    \"battling\": 5,\n    \"climbing\": 3,\n    \"escaping\": 2\n  },\n  \"Theme & mood\": {\n    \"epic\": 4,\n    \"tense\": 3,\n    \"swashbuckling\": 2\n  },\n  \"Brief\": \"A cinematic sea battle where a pirate crew defends its treasure from a mythic sea monster in heavy fog.\"\n}\n```\n\n**Assistant Output:**  \n```json\n{\n  \"Subject matter\": [\n    \"mast graveyard\",\n    \"crow’s nest\",\n    \"glimmering vault\",\n    \"ghost-lantern fleet\"\n  ],\n  \"Action & pose\": [\n    \"leaping between sails\",\n    \"swinging a flaming chain\",\n    \"ripping open\"\n  ],\n  \"Theme & mood\": [\n    \"valor\",\n    \"haunted glory\",\n    \"desperation\",\n    \"reckless defiance\"\n  ]\n}\n```\n\n# Notes\n\n- Combine or remix at least two original keywords for each new keyword.\n- Emphasize boldness and novelty over similarity.\n- Ensure keywords are derived from original input without external information.\n\n\n"
-        }
-          ]
-        },
-        {
-          role: "user",
-          content: data
-        }
-      ],
-      text: {
-        format: {
-          type: "json_object"
-        }
-      },
-      temperature: 1,
-      max_output_tokens: 2048,
-      top_p: 1,
-      store: true
-    });
-
-    return JSON.parse(response.output_text);;
+    return await expandKeywords(data);
 }
 
 export async function recommendBroadNarrowKeywords (data) {
-     const openai = getOpenAIClient();
-     const response = await openai.responses.create({
-      model: OPENAIMODEL,
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: "Generate creative expansions for illustration concepts based on given keywords and a design brief.\n\nYou will be provided with:\n1. Three vote-weighted keyword lists (each item = { term: integer }):\n   - **Subject matter**: Specific nouns or noun phrases, including compound objects and descriptive pairings.\n   - **Action & pose**: Clearly implied actions or poses. Use the base form or descriptive phrases.\n   - **Theme & mood**: Adjectives or abstract nouns capturing emotion, setting, or cultural context.\n2. **Design Brief (string)**: A free-form text description of the overall illustration intent, use-case, or style.\n\n# Steps\n\n## Understand the Input\n- Thoroughly analyze the design brief and keyword lists to grasp the creative direction and intent.\n\n## Expand the Keywords Creatively\n- **Prioritize**: Emphasize high-vote-weight terms for expansion.\n- **Broader Expansions**: Generate terms that are more general, conceptual, or open-ended to inspire wide exploration.\n- **More Specific Expansions**: Create rich, vivid, or unexpected ideas that refine and sharpen the visual concept.\n- **Avoid**: Steer clear of simple rewordings, synonyms, plurals, or style descriptors like \"cartoon\" or \"vector\".\n- Ensure that each expansion is imaginative, meaningfully distinct, concise, and grounded in or inspired by at least one **Subject matter** keyword (whenever applicable). \n- For each top-level category — Broader and More Specific — generate a total of at most 10 expanded keywords combined across all three subcategories (Subject matter, Action & pose, Theme & mood).\n- Distribute these items in any way across the three subcategories, based on what is most natural and creative for the input. For example, you might do 4 Subject matter, 3 Action & pose, 3 Theme & mood for Broader, and 2, 5, 3 for More Specific.\n- Avoid rigidly forcing equal counts per subcategory; instead, focus on quality and creativity while keeping the total per top-level category at most 10.\n\n# Output Format\n\nOrganize your output into a structured JSON object with two top-level keys: \"Broader\" and \"More Specific\". Each should contain three subcategories: \"Subject matter\", \"Action & pose\", and \"Theme & mood\".\n\n# Examples\n\n**User Input:**  \n```json\n{\n  \"Subject matter\": {\n    \"oak tree\": 4,\n    \"fox\": 3,\n    \"mushroom\": 2\n  },\n  \"Theme & mood\": {\n    \"whimsical\": 5,\n    \"quiet\": 3,\n    \"eerie\": 1\n  },\n  \"Action & pose\": {\n    \"peering\": 4,\n    \"growing\": 3,\n    \"lurking\": 1\n  },\n  \"Brief\": \"Illustration for a fairy-tale children's book page set in an enchanted forest.\"\n}\n```\n\n**Assistant Output:**  \n```json\n{\n  \"Broader\": {\n    \"Subject matter\": [\n      \"enchanted woodland\",\n      \"woodland creatures\"\n    ],\n    \"Action & pose\": [\n      \"exploring hidden realms\",\n      \"awaiting discovery\"\n    ],\n    \"Theme & mood\": [\n      \"magical stillness\",\n      \"mysterious tranquility\"\n    ]\n  },\n  \"More Specific\": {\n    \"Subject matter\": [\n      \"fox curled atop ancient oak roots\",\n      \"mushrooms forming a glowing fairy ring\"\n    ],\n    \"Action & pose\": [\n      \"fox peering through tangled undergrowth\",\n      \"oak tree gently cradling tiny woodland animals\"\n    ],\n    \"Theme & mood\": [\n      \"playfully secretive atmosphere\",\n      \"subtle sense of wonder\"\n    ]\n  }\n}\n```\n\n**User Input:**\n```json\n{\n  \"Subject matter\": {\n    \"lantern\": 3,\n    \"owl\": 0\n  },\n  \"Theme & mood\": {\n    \"calm\": 2,\n    \"tense\": 1\n  },\n  \"Action & pose\": {},\n  \"Brief\": \"A night-time forest scene for a meditation app splash screen.\"\n}\n```\n\n**Assistant Output:**\n```json\n{\n  \"Broader\": {\n    \"Subject matter\": [\n      \"illuminated object\",\n      \"nocturnal forest life\",\n      \"source of gentle light\"\n    ],\n    \"Action & pose\": [\n      \"casting soft glow\",\n      \"enhancing stillness\"\n    ],\n    \"Theme & mood\": [\n      \"soothing atmosphere\",\n      \"tranquil energies\",\n      \"ethereal calm\"\n    ]\n  },\n  \"More Specific\": {\n    \"Subject matter\": [\n      \"lantern nestled in fern fronds\",\n      \"forest animals gazing at the light\"\n    ],\n    \"Action & pose\": [\n      \"radiating rippling halos\",\n      \"silent owl perche\",\n      \"weaving through mist\"\n    ],\n    \"Theme & mood\": [\n      \"hushed midnight calm\",\n      \"anticipation\",\n      \"misty veil of peace\"\n    ]\n  }\n}\n```\n\n**User Input:**\n```json\n{\n  \"Subject matter\": {\n    \"star\": 0,\n    \"moon\": 0,\n    \"planet\": 0\n  },\n  \"Theme & mood\": {\n    \"serene\": 0\n  },\n  \"Action & pose\": {\n    \"glowing\": 0,\n    \"orbiting\": 0,\n    \"drifting\": 0\n  },\n  \"Brief\": \"Scene illustrating a quiet night sky composition.\"\n}\n```\n\n**Assistant Output:**\n```json\n{\n  \"Broader\": {\n    \"Subject matter\": [\n      \"celestial bodies\",\n      \"cosmic landscape\",\n      \"nighttime expanse\"\n    ],\n    \"Action & pose\": [\n      \"gentle movement\",\n      \"celestial harmony\"\n    ],\n    \"Theme & mood\": [\n      \"tranquility\",\n      \"dreamlike stillness\",\n      \"universal calm\"\n    ]\n  },\n  \"More Specific\": {\n    \"Subject matter\": [\n      \"silver crescent moon\",\n      \"distant glowing planet\"\n    ],\n    \"Action & pose\": [\n      \"stars softly pulsing\",\n      \"planet slowly turning\",\n      \"moonlight subtly diffusing\"\n    ],\n    \"Theme & mood\": [\n      \"whispering silence\",\n      \"quiet cosmic serenity\"\n    ]\n  }\n}\n```\n\n# Notes\n\n- The keyword expansions should be highly creative, distinct, and concise to fuel unique illustration concepts.\n- Emphasize boldness and novelty over similarity.\n- Ensure all keywords are derived from the original input without external information."
-        }
-          ]
-        },
-        {
-          role: "user",
-          content: data
-        }
-      ],
-      text: {
-        format: {
-          type: "json_object"
-        }
-      },
-      temperature: 1,
-      max_output_tokens: 2048,
-      top_p: 1,
-      store: true
-    });
-
-    return JSON.parse(response.output_text);;
+    return await expandKeywords(data);
 }
 
 export async function generateTextualDescriptions (data) {
