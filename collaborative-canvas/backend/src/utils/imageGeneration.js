@@ -1,140 +1,84 @@
 import fetch from 'node-fetch';
-import { Client } from "@gradio/client";
-import {uploadS3ImageGen} from "../services/s3service.js";
-
-import dotenv from "dotenv";
+import { Client } from '@gradio/client';
+import { uploadS3ImageGen } from '../services/s3service.js';
+import dotenv from 'dotenv';
 dotenv.config();
 
-const RUN_POD_API_KEY = process.env.RUN_POD_API_KEY
-
-const RUNPOD_BASE_URL_INSTDIFF = process.env.RUNPOD_BASE_URL_INSTDIFF;
-const RUNPOD_RUN_URL_INSTDIFF = `${RUNPOD_BASE_URL_INSTDIFF}/run`;
-
-const POLL_INTERVAL = 5000; // 5 seconds
-const MAX_ATTEMPTS = 60;    // ~5 minutes
-
-async function pollJobStatus(jobId, endpoint) {
-  const statusUrl = `${endpoint}/status/${jobId}`;
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = await fetch(statusUrl, {
-      headers: {
-        "Authorization": `Bearer ${RUN_POD_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to get job status: ${res.status}`);
-    }
-
-    const jobStatus = await res.json();
-    const status = jobStatus.status;
-    // console.log(`Polling attempt ${attempt + 1}: ${status}`);
-
-    if (status === "COMPLETED") return jobStatus.output;
-    if (status === "FAILED" || status === "CANCELLED") throw new Error(`Job ${status}`);
-
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
-  }
-
-  throw new Error("Timeout waiting for RunPod job completion.");
-}
+const EXTERNAL_AI_BASE_URL = (process.env.EXTERNAL_AI_BASE_URL || process.env.EXTERNAL_AI_GATEWAY_URL || 'http://localhost:8080').replace(/\/$/, '');
+const EXTERNAL_AI_API_KEY = process.env.EXTERNAL_AI_API_KEY;
+const REQUEST_TIMEOUT_MS = Number(process.env.EXTERNAL_AI_TIMEOUT_MS) || 180000; // 3 minutes
 
 export async function generateImage(data) {
-  const requestConfig = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${RUN_POD_API_KEY}`,
-    },
-    body: JSON.stringify({
-      input: data})
-  };
+  const headers = { 'Content-Type': 'application/json' };
+  if (EXTERNAL_AI_API_KEY) headers['Authorization'] = `Bearer ${EXTERNAL_AI_API_KEY}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(RUNPOD_RUN_URL_INSTDIFF, requestConfig);
-    if (!response.ok) {
-      throw new Error(`RunPod error! status: ${response.status}`);
+    const url = `${EXTERNAL_AI_BASE_URL}/instance-diffusion/generate`;
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(data), signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Instance-diffusion API error ${res.status}: ${txt}`);
     }
 
-    const result = await response.json();
-    const jobId = result.id;
-
-    if (!jobId) {
-      throw new Error("No job ID returned from RunPod.");
-    }
-
-    // Poll for completion
-    const output = await pollJobStatus(jobId, RUNPOD_BASE_URL_INSTDIFF); // Use base URL or polling URL
-    const base64Image = output?.image_base64;
-
-    if (!base64Image) {
-      throw new Error("No image_base64 returned after polling.");
-    }
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     const filename = uniqueFilename();
-
     const file = {
-      originalname: `${filename}_color.jpg`,
-      buffer: Buffer.from(base64Image, 'base64'),
-      mimetype: 'image/jpeg'
+      originalname: `${filename}_color.png`,
+      buffer,
+      mimetype: 'image/png',
     };
 
-    const client = await Client.connect("awacke1/Image-to-Line-Drawings");
+    // Upload the generated image to S3
+    const uploadResult = await uploadS3ImageGen(file);
 
-    // Run both upload and sketch generation in parallel
+    // Generate sketch via Gradio client (keeps previous behavior)
+    const base64Image = buffer.toString('base64');
+    const client = await Client.connect('awacke1/Image-to-Line-Drawings');
+
     const [_, sketchResult] = await Promise.all([
-      uploadS3ImageGen(file),
-      client.predict("/predict", {
+      Promise.resolve(uploadResult),
+      client.predict('/predict', {
         input_img: base64ToBlob(base64Image),
-        ver: "Complex Lines"
-      })
+        ver: 'Complex Lines',
+      }),
     ]);
 
-    if (!sketchResult) {
-      throw new Error("No sketchResult returned after polling.");
-    }
+    if (!sketchResult) throw new Error('No sketch result from Gradio client');
 
     const sketchfile = {
       originalname: `${filename}.jpg`,
       buffer: Buffer.from(await fetchImageAsBase64(sketchResult.data[0].url), 'base64'),
-      mimetype: 'image/jpeg'
+      mimetype: 'image/jpeg',
     };
 
     return await uploadS3ImageGen(sketchfile);
-
-  } catch (error) {
-    console.error("RunPod image generation failed:", error);
-    throw error;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Image-generation request timed out');
+    console.error('External image generation failed:', err);
+    throw err;
   }
 }
 
-function base64ToBlob(base64, contentType = 'image/jpeg') {
-  const byteCharacters = atob(base64);
-  const byteArrays = [];
-
-  for (let i = 0; i < byteCharacters.length; i += 512) {
-    const slice = byteCharacters.slice(i, i + 512);
-    const byteNumbers = new Array(slice.length);
-    for (let j = 0; j < slice.length; j++) {
-      byteNumbers[j] = slice.charCodeAt(j);
-    }
-    byteArrays.push(new Uint8Array(byteNumbers));
-  }
-
-  return new Blob(byteArrays, { type: contentType });
+function base64ToBlob(base64, contentType = 'image/png') {
+  return new Blob([Buffer.from(base64, 'base64')], { type: contentType });
 }
 
 async function fetchImageAsBase64(imageUrl) {
   const response = await fetch(imageUrl);
-  const arrayBuffer = await response.arrayBuffer(); // modern replacement for response.buffer()
-  const buffer = Buffer.from(arrayBuffer)
-  return buffer.toString("base64");
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return buffer.toString('base64');
 }
 
 const uniqueFilename = () => {
-  const timestamp = Date.now().toString(36); // base36 is shorter & readable
+  const timestamp = Date.now().toString(36);
   const random = Math.floor(Math.random() * 1e6).toString(36).padStart(4, '0');
   return `${timestamp}-${random}`;
 };
