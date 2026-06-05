@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import { Client } from '@gradio/client';
-import { uploadS3ImageGen } from '../services/s3service.js';
+import { uploadImageGen } from '../services/storageService.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -35,8 +35,8 @@ export async function generateImage(data) {
       mimetype: 'image/png',
     };
 
-    // Upload the generated image to S3
-    const uploadResult = await uploadS3ImageGen(file);
+    // Upload the generated image to local storage
+    const uploadResult = await uploadImageGen(file);
 
     // Generate sketch via Gradio client (keeps previous behavior)
     const base64Image = buffer.toString('base64');
@@ -58,7 +58,7 @@ export async function generateImage(data) {
       mimetype: 'image/jpeg',
     };
 
-    return await uploadS3ImageGen(sketchfile);
+    return await uploadImageGen(sketchfile);
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Image-generation request timed out');
     console.error('External image generation failed:', err);

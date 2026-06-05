@@ -5,7 +5,7 @@ import Image from '../models/image.model.js';
 import Keyword from '../models/keyword.model.js';
 import Board from '../models/board.model.js';
 import Thread from '../models/thread.model.js';
-import { deleteS3Image } from './s3service.js';
+import { deleteImage } from './storageService.js';
 
 // --- Main Service Functions ---
 
@@ -53,7 +53,7 @@ export async function deleteImageById(imageId) {
     image.boardId
       ? Board.findByIdAndUpdate(image.boardId, { $pull: { images: imageId } })
       : null,
-    image.url ? deleteS3Image(image.url) : null,
+    image.url ? deleteImage(image.url) : null,
   ]);
 
   return image;

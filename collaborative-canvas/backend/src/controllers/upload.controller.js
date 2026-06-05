@@ -1,4 +1,4 @@
-import { uploadS3Image } from '../services/s3service.js';
+import { uploadImage as storeUploadImage } from '../services/storageService.js';
 import { createImage } from '../services/imageService.js';
 import { addArrangementToImage, addKeywordsToImage } from '../services/keywordService.js';
 import { sendBufferImageToSAM } from '../utils/imageSegmentation.js';
@@ -107,9 +107,11 @@ export const uploadImage = (users, io) => async (req, res) => {
     const uploadId = generateCode(7);
     const progressCounter = createUploadProgressCounter(io, socketId, uploadId, fullImage.originalname);
 
-    // S3 upload + DB create (fail fast, errors handled)
-    const uploadResult = await safeS3Upload(fullImage, res);
-    if (!uploadResult) return; // error sent in safeS3Upload
+    // Storage upload + DB create (fail fast, errors handled)
+    const uploadResult = await safeUpload(fullImage, res);
+    if (!uploadResult) return; // error sent in safeUpload
+
+    console.log('upload.controller uploadResult:', { url: uploadResult.url });
 
     progressCounter.add(12.5);
     const imageDoc = await safeCreateImage({
@@ -191,16 +193,16 @@ export function emitNewImageToRoom(io, user, imageDoc) {
 }
 
 /**
- * Uploads file to S3 in a fail-safe wrapper, sends error on failure.
+ * Uploads file to local storage in a fail-safe wrapper, sends error on failure.
  * @param {object} file
  * @param {import('express').Response} res
  * @returns {Promise<{url:string}|null>}
  */
-export async function safeS3Upload(file, res) {
+export async function safeUpload(file, res) {
   try {
-    return await uploadS3Image(file);
+    return await storeUploadImage(file);
   } catch (error) {
-    logError('safeS3Upload', error);
+    logError('safeUpload', error);
     errorResponse(res, 502, 'Image storage failed');
     return null;
   }
