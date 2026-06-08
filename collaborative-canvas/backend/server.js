@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import multer from 'multer';
+import path from 'path';
 
 // Import local services and routes (use .js extension for relative imports)
 import { uploadImage } from './src/controllers/upload.controller.js';
@@ -60,9 +61,19 @@ app.options('*', (req, res) => {
 
 app.use(express.json());
 
+// Serve local images when LOCAL_STORAGE_PATH is set (development)
+const LOCAL_STORAGE_PATH = process.env.LOCAL_STORAGE_PATH;
+const LOCAL_STORAGE_URL_PREFIX = process.env.LOCAL_STORAGE_URL_PREFIX || '/local_images';
+if (LOCAL_STORAGE_PATH) {
+  const staticPath = path.resolve(LOCAL_STORAGE_PATH);
+  app.use(LOCAL_STORAGE_URL_PREFIX, express.static(staticPath));
+  console.log(`Serving local images from ${staticPath} at ${LOCAL_STORAGE_URL_PREFIX}`);
+}
+
 // Connect to MongoDB using Mongoose
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
+const MONGO_CONN = process.env.MONGO_URI || process.env.MONGODB_URI || `mongodb://localhost:27017/human-ai-art-collab`;
+mongoose.connect(MONGO_CONN)
+  .then(() => console.log("MongoDB connected to", MONGO_CONN))
   .catch(err => console.error("MongoDB connection error:", err));
 
 const server = http.createServer(app);

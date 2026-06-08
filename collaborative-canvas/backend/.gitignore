@@ -130,3 +130,6 @@ dist
 .pnp.*
 
 .env
+
+# Local storage for development images
+local_storage/

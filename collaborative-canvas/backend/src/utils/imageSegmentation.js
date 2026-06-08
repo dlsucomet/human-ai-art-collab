@@ -1,81 +1,55 @@
 import sharp from 'sharp';
 import fetch from 'node-fetch';
-import dotenv from "dotenv";
+import FormData from 'form-data';
+import dotenv from 'dotenv';
 dotenv.config();
 
-const RUN_POD_API_KEY = process.env.RUN_POD_API_KEY;
+const EXTERNAL_AI_BASE_URL = (process.env.EXTERNAL_AI_BASE_URL || process.env.EXTERNAL_AI_GATEWAY_URL || 'http://localhost:8080').replace(/\/$/, '');
+const EXTERNAL_AI_API_KEY = process.env.EXTERNAL_AI_API_KEY;
 
-const RUNPOD_BASE_URL_SAM2 = process.env.RUNPOD_BASE_URL_SAM2;
-const RUNPOD_RUN_URL_SAM2 = `${RUNPOD_BASE_URL_SAM2}/run`;
-
-const POLL_INTERVAL = 5000; // 5 seconds
-const MAX_ATTEMPTS = 60;    // ~5 minutes
-
-async function pollJobStatus(jobId, endpoint) {
-  const statusUrl = `${endpoint}/status/${jobId}`;
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const res = await fetch(statusUrl, {
-      headers: {
-        "Authorization": `Bearer ${RUN_POD_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to get job status: ${res.status}`);
-    }
-
-    const jobStatus = await res.json();
-    const status = jobStatus.status;
-    // console.log(`Polling attempt ${attempt + 1}: ${status}`);
-
-    if (status === "COMPLETED") return jobStatus.output;
-    if (status === "FAILED" || status === "CANCELLED") throw new Error(`Job ${status}`);
-
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
-  }
-
-  throw new Error("Timeout waiting for RunPod job completion.");
-}
+const REQUEST_TIMEOUT_MS = Number(process.env.EXTERNAL_AI_TIMEOUT_MS) || 120000; // 2 minutes
 
 export async function sendBufferImageToSAM(imageBuffer, filename, mimetype) {
   const { width, height } = await sharp(imageBuffer).metadata();
-  const base64Image = imageBuffer.toString('base64');
 
-  const requestConfig = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${RUN_POD_API_KEY}`,
-    },
-    body: JSON.stringify({
-      input: {
-        image_bytes: base64Image,
-      }
-    })
+  const form = new FormData();
+  form.append('image', imageBuffer, { filename, contentType: mimetype });
+
+  const headers = {
+    ...form.getHeaders(),
   };
+  if (EXTERNAL_AI_API_KEY) headers['Authorization'] = `Bearer ${EXTERNAL_AI_API_KEY}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(RUNPOD_RUN_URL_SAM2, requestConfig);
-    if (!response.ok) throw new Error(`RunPod error! status: ${response.status}`);
+    const url = `${EXTERNAL_AI_BASE_URL}/image-segmentation/segment`;
+    const res = await fetch(url, { method: 'POST', headers, body: form, signal: controller.signal });
+    clearTimeout(timeout);
 
-    const result = await response.json();
-    const jobId = result.id;
-    if (!jobId) throw new Error("No job ID returned from RunPod.");
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Segmentation API error ${res.status}: ${txt}`);
+    }
 
-    const output = await pollJobStatus(jobId, RUNPOD_BASE_URL_SAM2);
+    const result = await res.json();
 
-    const boundingBoxes = output?.bounding_boxes;
-    if (!boundingBoxes) throw new Error("No bounding boxes returned from RunPod.");
+    const boundingBoxes = result?.bounding_boxes || result?.boundingBoxes || null;
+    const imageSize = result?.image_size || result?.imageSize || null;
 
-    return normalizeBboxes(boundingBoxes, width, height);
-  } catch (error) {
-    console.error("RunPod request failed:", error);
-    throw error;
+    if (!boundingBoxes) throw new Error('No bounding_boxes returned from segmentation API');
+
+    const w = imageSize?.width || width;
+    const h = imageSize?.height || height;
+
+    return normalizeBboxes(boundingBoxes, w, h);
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Segmentation request timed out');
+    console.error('Segmentation request failed:', err);
+    throw err;
   }
 }
-
 
 function normalizeBboxes(bboxes, imageWidth, imageHeight) {
   return bboxes.map(bbox => {
